@@ -270,8 +270,8 @@ fitBoost.smaller <- train(classe ~ ., data = train1.smaller, method="gbm", verbo
 predictionBoost.small <- predict(fitBoost.small, test1)
 predictionBoost.smaller <- predict(fitBoost.smaller, test1)
 
-qplot(preditionBoost.small, classe, data = train1.small)
-qplot(preditionBoost.smaller, classe, data = train1.smaller)
+qplot(predictionBoost.small, classe, data = train1.small)
+qplot(predictionBoost.smaller, classe, data = train1.smaller)
 
 ## Test prediction accuracy
 temp <- training[test.set1,]
@@ -279,12 +279,12 @@ temp <- training[test.set1,]
 resultsBoost.small <- data.frame(predictionBoost.small, temp$classe)
 accBoost.small <-sum(resultsBoost.small[,1] == resultsBoost.small[,2])/length(temp$classe)
 accBoost.small
-## 
+## [1] 0.9602244
 
 resultsBoost.smaller <- data.frame(predictionRf.smaller, temp$classe)
 accBoost.smaller <-sum(resultsBoost.smaller[,1] == resultsBoost.smaller[,2])/length(temp$classe)
 accBoost.smaller
-## 
+## [1] 0.9928608
 
 
 
