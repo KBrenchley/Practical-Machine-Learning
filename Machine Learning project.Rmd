@@ -62,6 +62,8 @@ training <- read.csv("pml-training.csv")
 testing <- read.csv("pml-testing.csv")
 
 library(caret)
+library(randomForest)
+library(tree)
 set.seed(11854)
 
 ## Cross Validation: Make training/testing sets out of training set
@@ -113,47 +115,178 @@ train2 <- training.new[train.set2,]
 test.set2 <- test.folds[[2]]
 test2 <- training[test.set2,]
 
-##train1$classe <- as.character(train1$classe)
-train1$cvtd_timestamp <-  as.numeric(train1$cvtd_timestamp)
-train1$user_name <- as.numeric(train1$user_name)
+## fix K-fold testing set so it can be predicted on
 len <- length(test1$classe)
 test1$classe <- NULL
 test1$problem_id <- 1:len
+
+len <- length(test2$classe)
+test2$classe <- NULL
+test2$problem_id <- 1:len
+
+## belt, forearm, arm, dumbbell
+
+## ===============================================
+## correlated predictors and principal compoenents
+
+## converting factors, char variables to numbers
+train1$cvtd_timestamp <-  as.numeric(train1$cvtd_timestamp)
+train1$user_name <- as.numeric(train1$user_name)
 test1$cvtd_timestamp <-  as.numeric(test1$cvtd_timestamp)
 test1$user_name <- as.numeric(test1$user_name)
 
 train2$cvtd_timestamp <-  as.numeric(train2$cvtd_timestamp)
 train2$user_name <- as.numeric(train2$user_name)
-len <- length(test2$classe)
-test2$classe <- NULL
-test2$problem_id <- 1:len
 test2$cvtd_timestamp <-  as.numeric(test2$cvtd_timestamp)
 test2$user_name <- as.numeric(test2$user_name)
 
-## belt, forearm, arm, dumbbell
-
-
-## correlated predictors and principal compoenents
-
+## Finding the variables that have useful variation
 M <- abs(cor(train1[,-59]))
 diag(M) <- 0
 cor.pred <- which(M > 0.8, arr.ind=T)
-cor.pred.90 <- which(M > 0.9, arr.ind=T)
 
-train1.small <- train1[,c(2, 5, 7, 8, 9, 10, 14, 15, 16, 17, 24, 25, 27, 30, 31, 32, 34, 35, 37, 39, 40, 42, 51, 52)]
+train1.small <- train1[,c(2,5,7,8,9,10,14,15,16,17,24,25,27,30,31,32,34,35,37,39,40,42,51,52)]
 train1.small$classe <- train1$classe
+
+## now with > 90%
+cor.pred.90 <- which(M > 0.9, arr.ind=T)
 
 train1.smaller <- train1[,c(7,8,10,14,15,16,24,25,37,39,52)]
 train1.smaller$classe <- train1$classe
 
-fit1.small <- train(classe ~ ., data = train1.small, method = "rf")
-fit1.smaller <- train(classe ~ ., data = train1.smaller,  method = "rf")
+## ===========================================================
+## Try models using the new training sets
 
-prediction1 <- predict(fit1.smaller, test1)
+## ---rpart----
+fitRpart.small <- train(classe ~ ., data = train1.small, method="rpart")
+fitRpart.smaller <- train(classe ~ ., data = train1.smaller, method="rpart")
 
+print(fitRpart.small$finalModel)
+plot(fitRpart.small$finalModel, uniform=TRUE, main="rpart Tree with small data")
+text(fitRpart.small$finalModel, use.n=TRUE, all=TRUE, cex=.8)
+
+print(fitRpart.smaller$finalModel)
+plot(fitRpart.smaller$finalModel, uniform=TRUE, main="rpart Tree with smaller data")
+text(fitRpart.smaller$finalModel, use.n=TRUE, all=TRUE, cex=.8)
+
+predictionRpart.small <- predict(fitRpart.small,test1)
+predictionRpart.smaller <- predict(fitRpart.smaller,test1)
+
+## Test prediction accuracy
 temp <- training[test.set1,]
-results1 <- data.frame(prediction1, temp$classe)
-sum(results1[,1] == results1[,2])
+
+resultsRpart.small <- data.frame(predictionRpart.small, temp$classe)
+accuracyRpart.small <- sum(resultsRpart.small[,1] == 
+                                 resultsRpart.small[,2])/length(temp$classe)
+accuracyRpart.small
+## [1] 0.5165563
+
+resultsRpart.smaller <- data.frame(predictionRpart.smaller, temp$classe)
+accuracyRpart.smaller <- sum(resultsRpart.smaller[,1] == 
+                                 resultsRpart.smaller[,2])/length(temp$classe)
+accuracyRpart.smaller
+## [1] 0.4228222
+
+## ----Tree----
+fitTree.small <- tree(classe ~ ., data = train1.small)
+fitTree.smaller <- tree(classe ~ ., data = train1.smaller)
+
+fitTree.small
+plot(fitTree.small)
+text(fitTree.small)
+
+predictionTree.small <- predict(fitTree.small, test1)
+predictionTree.smaller <- predict(fitTree.smaller, test1)
+
+## look at variable importance
+round(importance(predictionTree.small), 2)
+round(importance(predictionTree.smaller), 2)
+
+## Test prediction accuracy
+temp <- training[test.set1,]
+
+resultsTree.small <- data.frame(predictionTree.small, temp$classe)
+accTree.small <- sum(resultsTree.small[,1] == resultsTree.small[,2])/length(temp$classe)
+accTree.small
+## [1] 0.1742231
+
+resultsTree.smaller <- data.frame(predictionTree.smaller, temp$classe)
+accTree.smaller <- sum(resultsTree.smaller[,1] == resultsTree.smaller[,2])/length(temp$classe)
+accTree.smaller
+## [1] 0.03158431
+
+## ----Random Forests----
+
+## with train
+fitTrainRf.small <- train(classe ~ ., data = train1.small, method="rf", prox=TRUE)
+fitTrainRf.smaller <- train(classe ~ ., data = train1.smaller, method="rf", prox=TRUE)
+
+getTree(fitTrainRf.small$finalModel, k=2)
+getTree(fitTrainRf.smaller$finalModel, k=2)
+
+predictionTrainRf.small <- predict(fitTrainRf.small, test1)
+predictionTrainRf.smaller <- predict(fitTrainRf.smaller, test1)
+
+## Test prediction accuracy
+temp <- training[test.set1,]
+
+resultsTrainRf.small <- data.frame(predictionTrainRf.small, temp$classe)
+accTrainRf.small <- sum(resultsTrainRf.small[,1] == 
+                            resultsTrainRf.small[,2])/length(temp$classe)
+accTrainRf.small
+
+resultsTrainRf.smaller <- data.frame(predictionTrainRf.smaller, temp$classe)
+accTrainRf.smaller <- sum(resultsTrainRf.small[,1] == 
+                            resultsTrainRf.small[,2])/length(temp$classe)
+accTrainRf.smaller
+
+## with RandomForest
+
+fitRf.small <- randomForest(classe ~ ., data = train1.small, importance=TRUE, proximity = TRUE)
+fitRf.smaller <- randomForest(classe ~ ., data = train1.smaller, importance=TRUE, proximity = TRUE)
+
+predictionRf.small <- predict(fitRf.small, test1)
+predictionRf.smaller <- predict(fitRf.smaller, test1)
+
+## Test prediction accuracy
+temp <- training[test.set1,]
+
+resultsRf.small <- data.frame(predictionRf.small, temp$classe)
+accRf.small <-sum(resultsRf.small[,1] == resultsRf.small[,2])/length(temp$classe)
+accRf.small
+## [1] 0.9989801
+
+resultsRf.smaller <- data.frame(predictionRf.smaller, temp$classe)
+accRf.smaller <-sum(resultsRf.smaller[,1] == resultsRf.smaller[,2])/length(temp$classe)
+accRf.smaller
+## [1] 0.9928608
+
+## ----Boosting ----
+## Using gbm (boosting with trees)
+
+fitBoost.small <- train(classe ~ ., data = train1.small, method="gbm", verbose=FALSE)
+fitBoost.smaller <- train(classe ~ ., data = train1.smaller, method="gbm", verbose=FALSE)
+
+predictionBoost.small <- predict(fitBoost.small, test1)
+predictionBoost.smaller <- predict(fitBoost.smaller, test1)
+
+qplot(preditionBoost.small, classe, data = train1.small)
+qplot(preditionBoost.smaller, classe, data = train1.smaller)
+
+## Test prediction accuracy
+temp <- training[test.set1,]
+
+resultsBoost.small <- data.frame(predictionBoost.small, temp$classe)
+accBoost.small <-sum(resultsBoost.small[,1] == resultsBoost.small[,2])/length(temp$classe)
+accBoost.small
+## 
+
+resultsBoost.smaller <- data.frame(predictionRf.smaller, temp$classe)
+accBoost.smaller <-sum(resultsBoost.smaller[,1] == resultsBoost.smaller[,2])/length(temp$classe)
+accBoost.smaller
+## 
+
+
 
 ##train1.prComp <- prcomp(train1.small)
 ##plot(train1.prComp$x[,1], train1.prComp$x[,2])
