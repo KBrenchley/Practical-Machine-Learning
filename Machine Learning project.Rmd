@@ -1,0 +1,176 @@
+---
+title: "Machine Learning project"
+author: "Karen Brenchley"
+date: "January 17, 2015"
+output: html_document
+---
+Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+Goal:
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with.
+
+
+## How I built my model
+
+
+
+
+## How I used cross validation
+
+1. Use the training set
+
+2. Split it into training/test sets
+
+K-fold
+10 training/testing sets
+17660 per set
+
+3. Build a model on the training set
+
+4. Evaluate on the test set
+
+5. Repeat and average the estimated errors
+
+## What I think the expected out of sample error is
+
+For continuous data: Root mean squared error (RMSE):
+sqrt((sum(pred - truth)^2)/n)
+
+Categorical data: accuracy -- fraction correct
+use results from second half of project to project this
+-- or Kappa -- see 
+
+From Quiz 3.4:
+missClass = function(values,prediction){sum(((prediction > 0.5)*1) != values)/length(values)}
+
+## Why I made the choices I made
+
+```{r}
+setwd("~/Documents/Coursera/Practical Machine Learning/Project/Practical-Machine-Learning")
+
+download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile="pml-training.csv",method="curl")
+download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfil="pml-testing.csv",method = "curl")
+
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+
+library(caret)
+set.seed(11854)
+
+## Cross Validation: Make training/testing sets out of training set
+
+train.folds <- createFolds(y = training$classe, k=10, list=TRUE, returnTrain=TRUE)
+test.folds <- createFolds(y = training$classe, k=10, list=TRUE, returnTrain=FALSE)
+sapply(train.folds, length)
+sapply(test.folds, length)
+
+train.set1 <- train.folds[[1]]
+train1 <- training[train.set1,]
+test.set1 <- test.folds[[1]]
+test1 <- training[test.set1,]
+
+
+
+## -------- Creating models ---------
+
+## all in
+
+fit.all <- train(classe ~ ., data = training, method ="glm")
+fit.all <- train(classe ~ ., data = train1, method = "glm")
+
+train(x,y, , method = "glm", metric = "Accuracy")
+
+## some data mostly NA, so let's remove zero covariates
+
+near.zero <- nearZeroVar(training,saveMetrics = TRUE)
+training.new <- training[,near.zero$nzv == FALSE]
+
+## and get rid of the ones that are mostly NA
+
+training.new <- training.new[colSums(is.na(training.new)) == 0]
+
+## make new training sets based on training.new
+
+train.folds <- createFolds(y = training.new$classe, k=10, list=TRUE, returnTrain=TRUE)
+test.folds <- createFolds(y = training.new$classe, k=10, list=TRUE, returnTrain=FALSE)
+sapply(train.folds, length)
+sapply(test.folds, length)
+
+train.set1 <- train.folds[[1]]
+train1 <- training.new[train.set1,]
+test.set1 <- test.folds[[1]]
+test1 <- training[test.set1,]
+
+train.set2 <- train.folds[[2]]
+train2 <- training.new[train.set2,]
+test.set2 <- test.folds[[2]]
+test2 <- training[test.set2,]
+
+##train1$classe <- as.character(train1$classe)
+train1$cvtd_timestamp <-  as.numeric(train1$cvtd_timestamp)
+train1$user_name <- as.numeric(train1$user_name)
+len <- length(test1$classe)
+test1$classe <- NULL
+test1$problem_id <- 1:len
+test1$cvtd_timestamp <-  as.numeric(test1$cvtd_timestamp)
+test1$user_name <- as.numeric(test1$user_name)
+
+train2$cvtd_timestamp <-  as.numeric(train2$cvtd_timestamp)
+train2$user_name <- as.numeric(train2$user_name)
+len <- length(test2$classe)
+test2$classe <- NULL
+test2$problem_id <- 1:len
+test2$cvtd_timestamp <-  as.numeric(test2$cvtd_timestamp)
+test2$user_name <- as.numeric(test2$user_name)
+
+## belt, forearm, arm, dumbbell
+
+
+## correlated predictors and principal compoenents
+
+M <- abs(cor(train1[,-59]))
+diag(M) <- 0
+cor.pred <- which(M > 0.8, arr.ind=T)
+cor.pred.90 <- which(M > 0.9, arr.ind=T)
+
+train1.small <- train1[,c(2, 5, 7, 8, 9, 10, 14, 15, 16, 17, 24, 25, 27, 30, 31, 32, 34, 35, 37, 39, 40, 42, 51, 52)]
+train1.small$classe <- train1$classe
+
+train1.smaller <- train1[,c(7,8,10,14,15,16,24,25,37,39,52)]
+train1.smaller$classe <- train1$classe
+
+fit1.small <- train(classe ~ ., data = train1.small, method = "rf")
+fit1.smaller <- train(classe ~ ., data = train1.smaller,  method = "rf")
+
+prediction1 <- predict(fit1.smaller, test1)
+
+temp <- training[test.set1,]
+results1 <- data.frame(prediction1, temp$classe)
+sum(results1[,1] == results1[,2])
+
+##train1.prComp <- prcomp(train1.small)
+##plot(train1.prComp$x[,1], train1.prComp$x[,2])
+## made plot that loop up and around to the right
+
+## Confusion Matrix
+modelFit <- train(training$type ~ ., method = "glm", preProcess="pca", data=training)
+confusionMatrix(testing$type, predict(modelFit, testing))
+
+
+```
+
+
+
+### References
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz3P78EmOe4
+
