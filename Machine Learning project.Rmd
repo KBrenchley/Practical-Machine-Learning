@@ -1,62 +1,21 @@
 ---
 title: "Machine Learning project"
-author: "Karen Brenchley"
-date: "January 17, 2015"
 output: html_document
 ---
-Background
+## Background
 
 Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
 
-In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
-
 Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
 
-Goal:
-
-The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with.
+This paper discusses building a model that predicts the manner in which the health participants did the exercise, and discusses the use of cross validation and the expected out-of-sample error.
 
 
-## How I built my model
-
-
-
-
-## How I used cross validation
-
-1. Use the training set
-
-2. Split it into training/test sets
-
-K-fold
-10 training/testing sets
-17660 per set
-
-3. Build a model on the training set
-
-4. Evaluate on the test set
-
-5. Repeat and average the estimated errors
-
-## What I think the expected out of sample error is
-
-For continuous data: Root mean squared error (RMSE):
-sqrt((sum(pred - truth)^2)/n)
-
-Categorical data: accuracy -- fraction correct
-use results from second half of project to project this
--- or Kappa -- see 
-
-From Quiz 3.4:
-missClass = function(values,prediction){sum(((prediction > 0.5)*1) != values)/length(values)}
-
-## Why I made the choices I made
-
-```{r}
+```{r, echo=FALSE}
 setwd("~/Documents/Coursera/Practical Machine Learning/Project/Practical-Machine-Learning")
 
-download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile="pml-training.csv",method="curl")
-download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfil="pml-testing.csv",method = "curl")
+##download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile="pml-training.csv",method="curl")
+##download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfil="pml-testing.csv",method = "curl")
 
 training <- read.csv("pml-training.csv")
 testing <- read.csv("pml-testing.csv")
@@ -64,39 +23,57 @@ testing <- read.csv("pml-testing.csv")
 library(caret)
 library(randomForest)
 library(tree)
+library(rpart)
+library(gbm)
+library(survival)
+library(splines)
+library(plyr)
 set.seed(11854)
 
-## Cross Validation: Make training/testing sets out of training set
+```
 
-train.folds <- createFolds(y = training$classe, k=10, list=TRUE, returnTrain=TRUE)
-test.folds <- createFolds(y = training$classe, k=10, list=TRUE, returnTrain=FALSE)
-sapply(train.folds, length)
-sapply(test.folds, length)
+## Exploring the Data
 
-train.set1 <- train.folds[[1]]
-train1 <- training[train.set1,]
-test.set1 <- test.folds[[1]]
-test1 <- training[test.set1,]
+Inspecting an initial summary of the training data showed a number of variables containing mostly NA values, and others containing very similar values, as shown by the very narrow range and skewness of these boxplots with some of the variables associated with the belt sensors.
 
 
+```{r,echo=FALSE,fig.height = 8, fig.width = 6, fig.align='center'}
 
-## -------- Creating models ---------
+## -------- Data examination ---------
 
-## all in
+## charts and plots
+t <- training
+belts <- data.frame(t$roll_belt, t$pitch_belt, t$yaw_belt, t$total_accel_belt,
+                    t$max_roll_belt, t$max_picth_belt, t$max_yaw_belt)
 
-fit.all <- train(classe ~ ., data = training, method ="glm")
-fit.all <- train(classe ~ ., data = train1, method = "glm")
+par(mfrow = c(2, 1))
+boxplot(belts, main="Some Belt Variables")
 
-train(x,y, , method = "glm", metric = "Accuracy")
+boxplot(t$yaw_belt ~ t$classe, main= "Classe and Yaw Belt", xlab="Classe", ylab="Yaw Belt")
+par(mfrow = c(1, 1))
+```
+In addition, out of the `r nrow(training)` rows in the training set, many of the variables, such as var_accel_arm, min_roll_belt, and min_pitch_dumbbell had merely `r sum(!is.na(t$min_roll_belt))` values, with the rest NA. This was a small enough percentage that imputing values would be meaningless.
 
-## some data mostly NA, so let's remove zero covariates
+I choose to begin selecting variables by cleaning out the similar and mostly NA variables. I reduced the training set from 160 variables to 100 variables by removing those with near zero variance. I reduced the training set further down to 59 variables by removing those with NA values.
+
+```{r, echo=FALSE}
+
+## so let's remove zero covariates (variables whose values are very similar)
 
 near.zero <- nearZeroVar(training,saveMetrics = TRUE)
 training.new <- training[,near.zero$nzv == FALSE]
 
 ## and get rid of the ones that are mostly NA
 
+training.NA <- training.new[colSums(is.na(training.new)) > 0]
 training.new <- training.new[colSums(is.na(training.new)) == 0]
+```
+
+Even with the reduced set I still had many variables. I began to build a cross validation set. To do this, I used the K-fold method to create 10 training sets and 10 test sets out of the training set. I also needed to remove the classe variable from these test sets so that prediction could happen.
+
+```{r, echo=FALSE}
+
+## ---------- Training Sets ----------
 
 ## make new training sets based on training.new
 
@@ -110,21 +87,17 @@ train1 <- training.new[train.set1,]
 test.set1 <- test.folds[[1]]
 test1 <- training[test.set1,]
 
-train.set2 <- train.folds[[2]]
-train2 <- training.new[train.set2,]
-test.set2 <- test.folds[[2]]
-test2 <- training[test.set2,]
-
-## fix K-fold testing set so it can be predicted on
+## fix K-fold testing set so it can be predicted on (remove answers)
 len <- length(test1$classe)
 test1$classe <- NULL
 test1$problem_id <- 1:len
 
-len <- length(test2$classe)
-test2$classe <- NULL
-test2$problem_id <- 1:len
+```
 
-## belt, forearm, arm, dumbbell
+I began to build a model on the new training set. To do this, I began by examining the correlated predictors. The sensors were focused on the belt, arm, forearm, and dumbbell of each participant, with several sensors measuring different values, so I suspected that there might be strong correlation between many of these variables. Using the cor() function, I identified 24 variables in the remaining set with greater than .80 correlation, and with classe created a small training set. Out of curiosity, I also created a smaller training set with greater than .90 correlation. I began trying these two versions of the training set with the different algorithms.
+
+
+```{r, echo=FALSE}
 
 ## ===============================================
 ## correlated predictors and principal compoenents
@@ -134,11 +107,6 @@ train1$cvtd_timestamp <-  as.numeric(train1$cvtd_timestamp)
 train1$user_name <- as.numeric(train1$user_name)
 test1$cvtd_timestamp <-  as.numeric(test1$cvtd_timestamp)
 test1$user_name <- as.numeric(test1$user_name)
-
-train2$cvtd_timestamp <-  as.numeric(train2$cvtd_timestamp)
-train2$user_name <- as.numeric(train2$user_name)
-test2$cvtd_timestamp <-  as.numeric(test2$cvtd_timestamp)
-test2$user_name <- as.numeric(test2$user_name)
 
 ## Finding the variables that have useful variation
 M <- abs(cor(train1[,-59]))
@@ -154,8 +122,24 @@ cor.pred.90 <- which(M > 0.9, arr.ind=T)
 train1.smaller <- train1[,c(7,8,10,14,15,16,24,25,37,39,52)]
 train1.smaller$classe <- train1$classe
 
+```
+
+The variables for the small training set are: `r names(train1.small)`.
+
+The variables for the smaller training set are: `r names(train1.smaller)`.
+
+Since the response variable is a factor rather than continuous, linear models would be difficult to fit for this data set. To that end, I decided to use the first of my 10 training sets with different tree functions, and with boost, to compare the models' accuracy levels. I chose to compare accuracy of the rpart, tree, randomForest, and boost functions.
+
+```{r,echo=FALSE}
+
 ## ===========================================================
 ## Try models using the new training sets
+
+## tracking accuracy
+
+methods <- vector()
+small <- vector()
+smaller <- vector()
 
 ## ---rpart----
 fitRpart.small <- train(classe ~ ., data = train1.small, method="rpart")
@@ -173,18 +157,21 @@ predictionRpart.small <- predict(fitRpart.small,test1)
 predictionRpart.smaller <- predict(fitRpart.smaller,test1)
 
 ## Test prediction accuracy
+methods <- c(methods, "rpart")
 temp <- training[test.set1,]
 
 resultsRpart.small <- data.frame(predictionRpart.small, temp$classe)
 accuracyRpart.small <- sum(resultsRpart.small[,1] == 
                                  resultsRpart.small[,2])/length(temp$classe)
 accuracyRpart.small
+small <- c(small, accuracyRpart.small)
 ## [1] 0.5165563
 
 resultsRpart.smaller <- data.frame(predictionRpart.smaller, temp$classe)
 accuracyRpart.smaller <- sum(resultsRpart.smaller[,1] == 
                                  resultsRpart.smaller[,2])/length(temp$classe)
 accuracyRpart.smaller
+smaller <- c(smaller, accuracyRpart.smaller)
 ## [1] 0.4228222
 
 ## ----Tree----
@@ -199,46 +186,28 @@ predictionTree.small <- predict(fitTree.small, test1)
 predictionTree.smaller <- predict(fitTree.smaller, test1)
 
 ## look at variable importance
-round(importance(predictionTree.small), 2)
-round(importance(predictionTree.smaller), 2)
+##round(importance(predictionTree.small), 2)
+##round(importance(predictionTree.smaller), 2)
 
 ## Test prediction accuracy
+methods <- c(methods, "tree")
 temp <- training[test.set1,]
 
 resultsTree.small <- data.frame(predictionTree.small, temp$classe)
 accTree.small <- sum(resultsTree.small[,1] == resultsTree.small[,2])/length(temp$classe)
 accTree.small
+small <- c(small,accTree.small)
 ## [1] 0.1742231
 
 resultsTree.smaller <- data.frame(predictionTree.smaller, temp$classe)
 accTree.smaller <- sum(resultsTree.smaller[,1] == resultsTree.smaller[,2])/length(temp$classe)
 accTree.smaller
+smaller <- c(smaller,accTree.smaller)
 ## [1] 0.03158431
 
 ## ----Random Forests----
 
-## with train
-fitTrainRf.small <- train(classe ~ ., data = train1.small, method="rf", prox=TRUE)
-fitTrainRf.smaller <- train(classe ~ ., data = train1.smaller, method="rf", prox=TRUE)
-
-getTree(fitTrainRf.small$finalModel, k=2)
-getTree(fitTrainRf.smaller$finalModel, k=2)
-
-predictionTrainRf.small <- predict(fitTrainRf.small, test1)
-predictionTrainRf.smaller <- predict(fitTrainRf.smaller, test1)
-
-## Test prediction accuracy
-temp <- training[test.set1,]
-
-resultsTrainRf.small <- data.frame(predictionTrainRf.small, temp$classe)
-accTrainRf.small <- sum(resultsTrainRf.small[,1] == 
-                            resultsTrainRf.small[,2])/length(temp$classe)
-accTrainRf.small
-
-resultsTrainRf.smaller <- data.frame(predictionTrainRf.smaller, temp$classe)
-accTrainRf.smaller <- sum(resultsTrainRf.small[,1] == 
-                            resultsTrainRf.small[,2])/length(temp$classe)
-accTrainRf.smaller
+## with train -- way too long
 
 ## with RandomForest
 
@@ -249,16 +218,19 @@ predictionRf.small <- predict(fitRf.small, test1)
 predictionRf.smaller <- predict(fitRf.smaller, test1)
 
 ## Test prediction accuracy
+methods <- c(methods, "randomForest")
 temp <- training[test.set1,]
 
 resultsRf.small <- data.frame(predictionRf.small, temp$classe)
 accRf.small <-sum(resultsRf.small[,1] == resultsRf.small[,2])/length(temp$classe)
 accRf.small
+small <- c(small,accRf.small)
 ## [1] 0.9989801
 
 resultsRf.smaller <- data.frame(predictionRf.smaller, temp$classe)
 accRf.smaller <-sum(resultsRf.smaller[,1] == resultsRf.smaller[,2])/length(temp$classe)
 accRf.smaller
+smaller <- c(smaller,accRf.smaller)
 ## [1] 0.9928608
 
 ## ----Boosting ----
@@ -270,34 +242,119 @@ fitBoost.smaller <- train(classe ~ ., data = train1.smaller, method="gbm", verbo
 predictionBoost.small <- predict(fitBoost.small, test1)
 predictionBoost.smaller <- predict(fitBoost.smaller, test1)
 
-qplot(predictionBoost.small, classe, data = train1.small)
-qplot(predictionBoost.smaller, classe, data = train1.smaller)
-
 ## Test prediction accuracy
+methods <- c(methods,"boost")
 temp <- training[test.set1,]
 
 resultsBoost.small <- data.frame(predictionBoost.small, temp$classe)
 accBoost.small <-sum(resultsBoost.small[,1] == resultsBoost.small[,2])/length(temp$classe)
-accBoost.small
-## [1] 0.9602244
+small <- c(small, accBoost.small)
 
 resultsBoost.smaller <- data.frame(predictionRf.smaller, temp$classe)
 accBoost.smaller <-sum(resultsBoost.smaller[,1] == resultsBoost.smaller[,2])/length(temp$classe)
-accBoost.smaller
-## [1] 0.9928608
+smaller <- c(smaller, accBoost.smaller)
 
+## Accuracy comparison
 
-
-##train1.prComp <- prcomp(train1.small)
-##plot(train1.prComp$x[,1], train1.prComp$x[,2])
-## made plot that loop up and around to the right
-
-## Confusion Matrix
-modelFit <- train(training$type ~ ., method = "glm", preProcess="pca", data=training)
-confusionMatrix(testing$type, predict(modelFit, testing))
-
+accuracy.all <- data.frame(methods, small, smaller)
 
 ```
+
+```{r}
+accuracy.all
+```
+
+Upon examining the accuracy of the different functions, and compared with the different sizes of training sets, the randomForest function with the small training set had the highest accuracy of the eight attempts, though boost was close, and both randomForest and boost, using the smaller training set, weren't far behind. It's interesting to see that having more predictors improved the accuracy rate for some, though not all, of the functions. The randomForest function, with the small data set, appears to be the best choice.
+
+Now that I had built a model on the training set, and tested it on the test set, I needed to repeat the evaluation using the chosen model (randomForest) with all of the cross validation training and test sets, and average the estimated errors. For each of the 10 training/test sets, I measured the accuracy of the prediction by counting the number of correct predictions, divided by the number of observations in the test set.
+
+
+```{r, echo=FALSE}
+## -----------validate model-------------
+
+## Use cross validation to make sure that randomForest is best choice
+
+cv.accuracy <- vector()
+
+## use small training set variables
+training.cv <- training.new[,c(2,5,7,8,9,10,14,15,16,17,24,25,27,30,31,32,34,35,37,39,40,42,51,52)]
+training.cv$classe <- training.new$classe
+
+## Cross Validation: Make training/testing sets out of training set
+k <- 10
+traincv.folds <- createFolds(y = training.cv$classe, k=10, list=TRUE, returnTrain=TRUE)
+testcv.folds <- createFolds(y = training.cv$classe, k=10, list=TRUE, returnTrain=FALSE)
+sapply(traincv.folds, length)
+sapply(testcv.folds, length)
+
+for (i in 1:k) {
+    traincv.set <- traincv.folds[[i]]
+    train.temp <- training.cv[traincv.set,]
+    testcv.set <- testcv.folds[[i]]
+    test.temp <- training[testcv.set,]
+    test.temp.real <- test.temp
+    
+    len <- length(test.temp$classe)
+    test.temp$classe <- NULL
+    test.temp$problem_id <- 1:len
+    
+    fit <- randomForest(classe ~ ., data = train.temp, importance=TRUE, 
+                        proximity = TRUE)
+    predictCV <- predict(fit, test.temp)
+
+    ## Test prediction accuracy
+    resultsCV <- data.frame(predictCV, test.temp.real$classe)
+    accCV <-sum(resultsCV[,1] == resultsCV[,2])/length(test.temp.real$classe)
+  
+    cv.accuracy <- c(cv.accuracy, accCV)
+}
+
+```
+
+After completing the cross validation tests to validate the model, the accuracy values for the 10 predictions were:
+
+```{r}
+round(cv.accuracy, 3)
+
+```
+
+The mean of these was `r round(mean(cv.accuracy), 3)`. With the accuracy that high, I 
+
+
+```{r, echo=FALSE}
+## ------------fit the final model, and predict the test set results---------
+
+## set the training set to match our model
+
+training.final <- training.new ## with zero covariates removed
+testing.final <- testing
+
+training.final$cvtd_timestamp <-  as.numeric(training.final$cvtd_timestamp)
+training.final$user_name <- as.numeric(training.final$user_name)
+testing.final$cvtd_timestamp <-  as.numeric(testing.final$cvtd_timestamp)
+testing.final$user_name <- as.numeric(testing.final$user_name)
+
+M <- abs(cor(training.final[,-59]))
+diag(M) <- 0
+cor.pred <- which(M > 0.8, arr.ind=T)
+
+training.final <- training.final[,c(2,5,7,8,9,10,14,15,16,17,24,25,27,30,31,32,34,35,37,39,40,42,51,52)]
+training.final$classe <- training$classe
+
+fit.final <- randomForest(classe ~ ., data = training.final, importance=TRUE, 
+                        proximity = TRUE)
+
+
+predict.final <- predict(fit.final, testing.final)
+
+```
+
+```{r}
+print(fit.final)
+## note OOB estimate of error rate is 0.67%
+```
+
+Note that the OOB  estimate of the error rate is significantly lower than the cross validation accuracy levels. Still, the accuracy using the training and testing set with my randomForest model fit was 18/20, or `r round(18/20,2)`.
 
 
 
