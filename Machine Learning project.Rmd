@@ -355,7 +355,7 @@ predict.final <- predict(fit.final, testing.final)
 
 ### Conclusion
 
-The final model is
+The final model is 
 
 ```{r,echo=FALSE}
 print(fit.final)
