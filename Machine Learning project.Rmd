@@ -1,8 +1,9 @@
 ---
-title: "Machine Learning project"
 output: html_document
 ---
-## Background
+## Machine Learning - Predicting Dumbbells
+
+### Background
 
 Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
 
@@ -11,7 +12,7 @@ Six young health participants were asked to perform one set of 10 repetitions of
 This paper discusses building a model that predicts the manner in which the health participants did the exercise, and discusses the use of cross validation and the expected out-of-sample error.
 
 
-```{r, echo=FALSE}
+```{r,echo=FALSE}
 setwd("~/Documents/Coursera/Practical Machine Learning/Project/Practical-Machine-Learning")
 
 ##download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile="pml-training.csv",method="curl")
@@ -32,12 +33,12 @@ set.seed(11854)
 
 ```
 
-## Exploring the Data
+### Exploring the Data
 
 Inspecting an initial summary of the training data showed a number of variables containing mostly NA values, and others containing very similar values, as shown by the very narrow range and skewness of these boxplots with some of the variables associated with the belt sensors.
 
 
-```{r,echo=FALSE,fig.height = 8, fig.width = 6, fig.align='center'}
+```{r,echo=FALSE,fig.height = 6, fig.width = 8, fig.align='center'}
 
 ## -------- Data examination ---------
 
@@ -46,17 +47,17 @@ t <- training
 belts <- data.frame(t$roll_belt, t$pitch_belt, t$yaw_belt, t$total_accel_belt,
                     t$max_roll_belt, t$max_picth_belt, t$max_yaw_belt)
 
-par(mfrow = c(2, 1))
+par(mfrow = c(1, 2))
 boxplot(belts, main="Some Belt Variables")
 
-boxplot(t$yaw_belt ~ t$classe, main= "Classe and Yaw Belt", xlab="Classe", ylab="Yaw Belt")
+boxplot(t$yaw_belt ~ t$classe, main= "Yaw Belt with Classe", xlab="Classe", ylab="Yaw Belt")
 par(mfrow = c(1, 1))
 ```
-In addition, out of the `r nrow(training)` rows in the training set, many of the variables, such as var_accel_arm, min_roll_belt, and min_pitch_dumbbell had merely `r sum(!is.na(t$min_roll_belt))` values, with the rest NA. This was a small enough percentage that imputing values would be meaningless.
+In addition, out of the `r nrow(training)` rows in the training set, many of the variables, such as var_accel_arm, min_roll_belt, and min_pitch_dumbbell had merely `r sum(!is.na(t$min_roll_belt))` values, with the rest NA. This was a small enough number that imputing the remaining `r nrow(training) - sum(!is.na(t$min_roll_belt))` values would likely not add enough variability to be meaningful.
 
-I choose to begin selecting variables by cleaning out the similar and mostly NA variables. I reduced the training set from 160 variables to 100 variables by removing those with near zero variance. I reduced the training set further down to 59 variables by removing those with NA values.
+I chose to begin selecting variables for my model by cleaning out the similar and mostly NA variables. I reduced the training set from 160 variables to 100 variables by removing those with near zero variance. I reduced the training set further down to 59 variables by removing those with NA values.
 
-```{r, echo=FALSE}
+```{r,echo=FALSE}
 
 ## so let's remove zero covariates (variables whose values are very similar)
 
@@ -69,7 +70,9 @@ training.NA <- training.new[colSums(is.na(training.new)) > 0]
 training.new <- training.new[colSums(is.na(training.new)) == 0]
 ```
 
-Even with the reduced set I still had many variables. I began to build a cross validation set. To do this, I used the K-fold method to create 10 training sets and 10 test sets out of the training set. I also needed to remove the classe variable from these test sets so that prediction could happen.
+### Starting Cross Validation
+
+Even with the reduced set I still had many variables. I began to build a cross validation set. To do this, I used the K-fold method to create 10 training sets and 10 test sets out of the training set. 
 
 ```{r, echo=FALSE}
 
@@ -79,8 +82,8 @@ Even with the reduced set I still had many variables. I began to build a cross v
 
 train.folds <- createFolds(y = training.new$classe, k=10, list=TRUE, returnTrain=TRUE)
 test.folds <- createFolds(y = training.new$classe, k=10, list=TRUE, returnTrain=FALSE)
-sapply(train.folds, length)
-sapply(test.folds, length)
+## sapply(train.folds, length)
+## sapply(test.folds, length)
 
 train.set1 <- train.folds[[1]]
 train1 <- training.new[train.set1,]
@@ -94,7 +97,11 @@ test1$problem_id <- 1:len
 
 ```
 
-I began to build a model on the new training set. To do this, I began by examining the correlated predictors. The sensors were focused on the belt, arm, forearm, and dumbbell of each participant, with several sensors measuring different values, so I suspected that there might be strong correlation between many of these variables. Using the cor() function, I identified 24 variables in the remaining set with greater than .80 correlation, and with classe created a small training set. Out of curiosity, I also created a smaller training set with greater than .90 correlation. I began trying these two versions of the training set with the different algorithms.
+This gave me 10 training sets with length of around `r length(train1)` and 10 testing sets (also taken from the training set) with length of around `r length(test1)`. I also needed to remove the classe variable from these test sets so that prediction could happen.
+
+### Beginning to Build a Model
+
+I began to build a model on the new training set. To do this, I began by examining the correlated predictors. The sensors were focused on the belt, arm, forearm, and dumbbell of each participant, with several sensors measuring different values, so I suspected that there might be strong correlation between many of these variables. Using the cor() function, I identified 24 variables in the remaining set with greater than .80 correlation, and with classe created a small training set. Out of curiosity, I also created a smaller training set with greater than .90 correlation. (Note that by "small" and "smaller" I mean fewer predictors for the model.) I began trying these two versions of the training set with the different algorithms.
 
 
 ```{r, echo=FALSE}
@@ -124,11 +131,17 @@ train1.smaller$classe <- train1$classe
 
 ```
 
-The variables for the small training set are: `r names(train1.small)`.
 
-The variables for the smaller training set are: `r names(train1.smaller)`.
+The variables for **the small training set** are: `r names(train1.small)`.
+
+The variables for **the smaller training set** are: `r names(train1.smaller)`.
 
 Since the response variable is a factor rather than continuous, linear models would be difficult to fit for this data set. To that end, I decided to use the first of my 10 training sets with different tree functions, and with boost, to compare the models' accuracy levels. I chose to compare accuracy of the rpart, tree, randomForest, and boost functions.
+
+### Testing Models with Cross-Validation Training Set 1
+
+Here are some of the results from my experiments with fitting models using different functions. Not all are shown due to space limitations.
+
 
 ```{r,echo=FALSE}
 
@@ -145,12 +158,12 @@ smaller <- vector()
 fitRpart.small <- train(classe ~ ., data = train1.small, method="rpart")
 fitRpart.smaller <- train(classe ~ ., data = train1.smaller, method="rpart")
 
-print(fitRpart.small$finalModel)
-plot(fitRpart.small$finalModel, uniform=TRUE, main="rpart Tree with small data")
+#print(fitRpart.small$finalModel)
+plot(fitRpart.small$finalModel, uniform=TRUE, main="rpart Tree with Small Training Set")
 text(fitRpart.small$finalModel, use.n=TRUE, all=TRUE, cex=.8)
 
-print(fitRpart.smaller$finalModel)
-plot(fitRpart.smaller$finalModel, uniform=TRUE, main="rpart Tree with smaller data")
+##print(fitRpart.smaller$finalModel)
+plot(fitRpart.smaller$finalModel, uniform=TRUE, main="rpart Tree with Smaller Training Set")
 text(fitRpart.smaller$finalModel, use.n=TRUE, all=TRUE, cex=.8)
 
 predictionRpart.small <- predict(fitRpart.small,test1)
@@ -163,23 +176,19 @@ temp <- training[test.set1,]
 resultsRpart.small <- data.frame(predictionRpart.small, temp$classe)
 accuracyRpart.small <- sum(resultsRpart.small[,1] == 
                                  resultsRpart.small[,2])/length(temp$classe)
-accuracyRpart.small
 small <- c(small, accuracyRpart.small)
-## [1] 0.5165563
 
 resultsRpart.smaller <- data.frame(predictionRpart.smaller, temp$classe)
 accuracyRpart.smaller <- sum(resultsRpart.smaller[,1] == 
                                  resultsRpart.smaller[,2])/length(temp$classe)
-accuracyRpart.smaller
 smaller <- c(smaller, accuracyRpart.smaller)
-## [1] 0.4228222
 
 ## ----Tree----
 fitTree.small <- tree(classe ~ ., data = train1.small)
 fitTree.smaller <- tree(classe ~ ., data = train1.smaller)
 
 fitTree.small
-plot(fitTree.small)
+plot(fitTree.small, main = "Tree with Small Training Set")
 text(fitTree.small)
 
 predictionTree.small <- predict(fitTree.small, test1)
@@ -195,15 +204,11 @@ temp <- training[test.set1,]
 
 resultsTree.small <- data.frame(predictionTree.small, temp$classe)
 accTree.small <- sum(resultsTree.small[,1] == resultsTree.small[,2])/length(temp$classe)
-accTree.small
 small <- c(small,accTree.small)
-## [1] 0.1742231
 
 resultsTree.smaller <- data.frame(predictionTree.smaller, temp$classe)
 accTree.smaller <- sum(resultsTree.smaller[,1] == resultsTree.smaller[,2])/length(temp$classe)
-accTree.smaller
 smaller <- c(smaller,accTree.smaller)
-## [1] 0.03158431
 
 ## ----Random Forests----
 
@@ -223,15 +228,11 @@ temp <- training[test.set1,]
 
 resultsRf.small <- data.frame(predictionRf.small, temp$classe)
 accRf.small <-sum(resultsRf.small[,1] == resultsRf.small[,2])/length(temp$classe)
-accRf.small
 small <- c(small,accRf.small)
-## [1] 0.9989801
 
 resultsRf.smaller <- data.frame(predictionRf.smaller, temp$classe)
 accRf.smaller <-sum(resultsRf.smaller[,1] == resultsRf.smaller[,2])/length(temp$classe)
-accRf.smaller
 smaller <- c(smaller,accRf.smaller)
-## [1] 0.9928608
 
 ## ----Boosting ----
 ## Using gbm (boosting with trees)
@@ -260,11 +261,15 @@ accuracy.all <- data.frame(methods, small, smaller)
 
 ```
 
+### Accuracy of Tests
+
 ```{r}
 accuracy.all
 ```
 
-Upon examining the accuracy of the different functions, and compared with the different sizes of training sets, the randomForest function with the small training set had the highest accuracy of the eight attempts, though boost was close, and both randomForest and boost, using the smaller training set, weren't far behind. It's interesting to see that having more predictors improved the accuracy rate for some, though not all, of the functions. The randomForest function, with the small data set, appears to be the best choice.
+Upon examining the accuracy of the different functions, and compared with the different sizes of training sets, the **randomForest** function with the small training set had the highest accuracy of the eight attempts, though boost was close, and both randomForest and boost, using the smaller training set, weren't far behind. It's interesting to see that having more predictors improved the accuracy rate for some, though not all, of the functions. The randomForest function, with the small data set, appears to be the best choice.
+
+### Cross Validation with Chosen Model
 
 Now that I had built a model on the training set, and tested it on the test set, I needed to repeat the evaluation using the chosen model (randomForest) with all of the cross validation training and test sets, and average the estimated errors. For each of the 10 training/test sets, I measured the accuracy of the prediction by counting the number of correct predictions, divided by the number of observations in the test set.
 
@@ -284,8 +289,8 @@ training.cv$classe <- training.new$classe
 k <- 10
 traincv.folds <- createFolds(y = training.cv$classe, k=10, list=TRUE, returnTrain=TRUE)
 testcv.folds <- createFolds(y = training.cv$classe, k=10, list=TRUE, returnTrain=FALSE)
-sapply(traincv.folds, length)
-sapply(testcv.folds, length)
+##sapply(traincv.folds, length)
+##sapply(testcv.folds, length)
 
 for (i in 1:k) {
     traincv.set <- traincv.folds[[i]]
@@ -313,12 +318,12 @@ for (i in 1:k) {
 
 After completing the cross validation tests to validate the model, the accuracy values for the 10 predictions were:
 
-```{r}
+```{r,echo=FALSE}
 round(cv.accuracy, 3)
 
 ```
 
-The mean of these was `r round(mean(cv.accuracy), 3)`. With the accuracy that high, I 
+The mean was `r round(mean(cv.accuracy), 3)`. With the accuracy that high, I chose to fit the model with the entire training and testing sets, and use this to predict the classe variable from the testing set.
 
 
 ```{r, echo=FALSE}
@@ -344,19 +349,20 @@ training.final$classe <- training$classe
 fit.final <- randomForest(classe ~ ., data = training.final, importance=TRUE, 
                         proximity = TRUE)
 
-
 predict.final <- predict(fit.final, testing.final)
 
 ```
 
-```{r}
+### Conclusion
+
+The final model is
+
+```{r,echo=FALSE}
 print(fit.final)
 ## note OOB estimate of error rate is 0.67%
 ```
 
-Note that the OOB  estimate of the error rate is significantly lower than the cross validation accuracy levels. Still, the accuracy using the training and testing set with my randomForest model fit was 18/20, or `r round(18/20,2)`.
-
-
+It's interesting to note in the final model that the OOB  estimate of the error rate is significantly lower than the cross validation accuracy results, which were 0.99. Still, the accuracy using the training and testing set with my randomForest model fit was 18/20, or `r round(18/20,2)`, slightly below the estimated out of sample error that was expected to have success be closer to 0.99. 
 
 ### References
 
