@@ -97,7 +97,7 @@ test1$problem_id <- 1:len
 
 ```
 
-This gave me 10 training sets with length of around `r length(train1)` and 10 testing sets (also taken from the training set) with length of around `r length(test1)`. I also needed to remove the classe variable from these test sets so that prediction could happen.
+This gave me 10 training sets with length of around `r length(train1$classe)` and 10 testing sets (also taken from the training set) with length of around `r length(test1$problem_id)`. I also needed to remove the classe variable from these test sets so that prediction could happen.
 
 ### Beginning to Build a Model
 
@@ -187,7 +187,7 @@ smaller <- c(smaller, accuracyRpart.smaller)
 fitTree.small <- tree(classe ~ ., data = train1.small)
 fitTree.smaller <- tree(classe ~ ., data = train1.smaller)
 
-fitTree.small
+##fitTree.small
 plot(fitTree.small, main = "Tree with Small Training Set")
 text(fitTree.small)
 
